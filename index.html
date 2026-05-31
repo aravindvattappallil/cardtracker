@@ -1,0 +1,712 @@
+import { useState, useMemo } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const COLORS_PALETTE = ["#f59e0b","#10b981","#3b82f6","#8b5cf6","#ef4444","#ec4899","#06b6d4","#f97316","#84cc16","#a78bfa"];
+
+const fmt = (n) => {
+  if (n===""||n===null||n===undefined) return "";
+  const num = parseFloat(n);
+  if (isNaN(num)) return "";
+  return num < 0 ? `(${Math.abs(num).toFixed(2)})` : `$${num.toFixed(2)}`;
+};
+
+const today = new Date();
+const currentMonth = today.getMonth();
+
+function getDaysUntilDue(dueDay) {
+  if (!dueDay) return null;
+  const due = new Date(today.getFullYear(), today.getMonth(), dueDay);
+  return Math.ceil((due - today) / (1000*60*60*24));
+}
+
+function nth(n) {
+  if(n>3&&n<21) return "th";
+  switch(n%10){case 1:return"st";case 2:return"nd";case 3:return"rd";default:return"th";}
+}
+
+// ─── ADD CARD MODAL ───────────────────────────────────────────────────────────
+function AddCardModal({ onAdd, onClose }) {
+  const [name, setName] = useState("");
+  const [statementDay, setStatementDay] = useState("");
+  const [dueDay, setDueDay] = useState("");
+
+  const submit = () => {
+    if (!name.trim()) return;
+    onAdd({ name: name.trim(), statementDay: parseInt(statementDay)||null, dueDay: parseInt(dueDay)||null });
+    onClose();
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+      onClick={e => e.target===e.currentTarget && onClose()}>
+      <div style={{ background:"#0f0f1a", border:"1px solid #252535", borderRadius:16, padding:28, width:"100%", maxWidth:380 }}>
+        <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, letterSpacing:2, color:"#f1f5f9", marginBottom:20 }}>ADD NEW CARD</div>
+        {[
+          { label:"CARD NAME", placeholder:"e.g. Scotia Visa", val:name, set:setName, type:"text" },
+          { label:"STATEMENT DATE (day of month)", placeholder:"e.g. 15 → statement on the 15th", val:statementDay, set:setStatementDay, type:"number" },
+          { label:"PAYMENT DUE DATE (day of month)", placeholder:"e.g. 10 → due on 10th", val:dueDay, set:setDueDay, type:"number" },
+        ].map(({label,placeholder,val,set,type}) => (
+          <div key={label} style={{ marginBottom:16 }}>
+            <div style={{ fontSize:10, letterSpacing:2, color:"#4b5563", marginBottom:6 }}>{label}</div>
+            <input type={type} value={val} onChange={e=>set(e.target.value)} placeholder={placeholder}
+              onKeyDown={e=>e.key==="Enter"&&submit()}
+              style={{ width:"100%", background:"#131320", border:"1px solid #252535", color:"#d1d5db", padding:"10px 14px", borderRadius:8, fontSize:13, fontFamily:"'DM Mono',monospace", outline:"none" }} />
+          </div>
+        ))}
+        <div style={{ fontSize:11, color:"#374151", marginBottom:20, lineHeight:1.7 }}>
+          ⏰ You'll see an alert 5 days before your payment is due each month.
+        </div>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={onClose} style={{ flex:1, padding:"10px", background:"transparent", border:"1px solid #252535", color:"#6b7280", borderRadius:8, cursor:"pointer", fontFamily:"'DM Mono',monospace", fontSize:12 }}>CANCEL</button>
+          <button onClick={submit} style={{ flex:2, padding:"10px", background:"#1a1a2e", border:"1px solid #4f46e5", color:"#818cf8", borderRadius:8, cursor:"pointer", fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:500 }}>+ ADD CARD</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MONTH DRAWER ─────────────────────────────────────────────────────────────
+function MonthDrawer({ activeMonth, setActiveMonth, onClose }) {
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:90 }} onClick={onClose}>
+      <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.65)" }} />
+      <div style={{ position:"absolute", top:0, left:0, bottom:0, zIndex:91, background:"#0a0a14", border:"1px solid #1a1a28", borderRadius:"0 16px 16px 0", padding:"28px 0", width:210, display:"flex", flexDirection:"column" }}
+        onClick={e=>e.stopPropagation()}>
+        <div style={{ fontSize:10, letterSpacing:3, color:"#4b5563", padding:"0 20px 14px", borderBottom:"1px solid #1a1a28" }}>FILTER BY MONTH</div>
+        <div style={{ overflowY:"auto", flex:1, paddingTop:6 }}>
+          {[{label:"ALL MONTHS",val:null},...MONTHS.map((m,i)=>({label:m.toUpperCase(),val:i}))].map(({label,val})=>(
+            <button key={label} onClick={()=>{setActiveMonth(val);onClose();}}
+              style={{ width:"100%", textAlign:"left", padding:"11px 20px", background:activeMonth===val?"rgba(99,102,241,0.1)":"transparent", border:"none", borderLeft:activeMonth===val?"3px solid #6366f1":"3px solid transparent", color:activeMonth===val?"#818cf8":"#6b7280", fontFamily:"'DM Mono',monospace", fontSize:12, letterSpacing:1.5, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
+              {label}
+              {val===currentMonth&&<span style={{ fontSize:9, color:"#f59e0b", background:"rgba(245,158,11,0.1)", padding:"1px 6px", borderRadius:10 }}>NOW</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DUE ALERTS ───────────────────────────────────────────────────────────────
+function DueAlerts({ cards, paid }) {
+  const alerts = cards.filter(c => {
+    if (!c.dueDay) return false;
+    const days = getDaysUntilDue(c.dueDay);
+    return !paid[c.id]?.[currentMonth] && days !== null && days <= 5;
+  }).map(c => ({ ...c, days: getDaysUntilDue(c.dueDay) }));
+  if (!alerts.length) return null;
+  return (
+    <div style={{ marginBottom:18, display:"flex", flexDirection:"column", gap:8 }}>
+      {alerts.map(c => (
+        <div key={c.id} style={{ background:c.days<0?"rgba(239,68,68,0.08)":"rgba(251,191,36,0.07)", border:`1px solid ${c.days<0?"rgba(239,68,68,0.35)":"rgba(251,191,36,0.28)"}`, borderRadius:10, padding:"11px 14px", display:"flex", alignItems:"center", gap:10 }}>
+          <span style={{ fontSize:16 }}>{c.days<0?"🚨":"⚠️"}</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:12, color:c.days<0?"#f87171":"#fbbf24", fontWeight:500 }}>
+              {c.name} — {c.days<0?`OVERDUE by ${Math.abs(c.days)}d`:c.days===0?"DUE TODAY":`Due in ${c.days} day${c.days===1?"":"s"} (${c.dueDay}${nth(c.dueDay)})`}
+            </div>
+            <div style={{ fontSize:10, color:"#374151", marginTop:2 }}>Mark as paid when done</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── ALL PAID CELEBRATION ─────────────────────────────────────────────────────
+function AllPaidBanner({ cards, paid, data }) {
+  const hasAmounts = cards.some(c => parseFloat(data[c.id]?.[currentMonth]) > 0);
+  const allPaid    = hasAmounts && cards.length > 0 && cards.every(c => {
+    const val = parseFloat(data[c.id]?.[currentMonth]);
+    return !val || val <= 0 || paid[c.id]?.[currentMonth];
+  });
+  if (!allPaid || !hasAmounts) return null;
+  const nextMonth = MONTHS[(currentMonth + 1) % 12];
+  return (
+    <div style={{ background:"rgba(16,185,129,0.07)", border:"1px solid rgba(16,185,129,0.3)", borderRadius:14, padding:"20px 18px", marginBottom:20, textAlign:"center" }}>
+      <div style={{ fontSize:28, marginBottom:8 }}>🎉</div>
+      <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, letterSpacing:2, color:"#10b981", marginBottom:6 }}>ALL BILLS PAID!</div>
+      <div style={{ fontSize:11, color:"#4b5563", lineHeight:1.8 }}>
+        You're all done for {MONTHS[currentMonth]}.<br/>
+        Cards will reset automatically in <span style={{ color:"#818cf8" }}>{nextMonth}</span> — just enter your new statement amounts then.
+      </div>
+      <div style={{ marginTop:14, display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
+        <div style={{ background:"rgba(16,185,129,0.1)", border:"1px solid rgba(16,185,129,0.2)", borderRadius:8, padding:"6px 14px", fontSize:10, color:"#6ee7b7", letterSpacing:1 }}>
+          ✓ {cards.length} CARD{cards.length>1?"S":""} CLEARED
+        </div>
+        <div style={{ background:"rgba(99,102,241,0.1)", border:"1px solid rgba(99,102,241,0.2)", borderRadius:8, padding:"6px 14px", fontSize:10, color:"#818cf8", letterSpacing:1 }}>
+          NEXT: {nextMonth.toUpperCase()} STATEMENTS
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TAB 1: THIS MONTH ───────────────────────────────────────────────────────
+function TabEntry({ cards, data, paid, onUpdateCell, onTogglePaid, onRemoveCard, setShowAddCard }) {
+  const [editingId, setEditingId] = useState(null);
+
+  const unpaidCards = cards; // all cards shown, paid ones highlighted green
+  const paidCards   = cards.filter(c => paid[c.id]?.[currentMonth]);
+
+  const monthTotal = cards.reduce((s,c)=>s+(parseFloat(data[c.id]?.[currentMonth])||0),0);
+  const paidTotal  = paidCards.reduce((s,c)=>s+(parseFloat(data[c.id]?.[currentMonth])||0),0);
+  const paidPct    = monthTotal>0 ? Math.min(100,(paidTotal/monthTotal)*100) : 0;
+
+  const CardRow = ({ card, isPaidRow }) => {
+    const val    = data[card.id]?.[currentMonth];
+    const isEdit = editingId === card.id;
+    const days   = getDaysUntilDue(card.dueDay);
+    const urgent = card.dueDay && days !== null && days <= 3 && !isPaidRow;
+
+    return (
+      <div style={{
+        display:"grid", gridTemplateColumns:"1fr auto auto auto",
+        alignItems:"center", gap:10,
+        background: isPaidRow ? "rgba(16,185,129,0.06)" : urgent ? "rgba(251,191,36,0.04)" : "#0f0f1a",
+        border: isPaidRow ? "1px solid rgba(16,185,129,0.2)" : urgent ? "1px solid rgba(251,191,36,0.22)" : "1px solid #1a1a28",
+        borderRadius:10, padding:"12px 14px", transition:"all 0.25s",
+      }}>
+        <div style={{ minWidth:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+            <div style={{ width:8, height:8, borderRadius:"50%", background:isPaidRow?"#10b981":card.color, flexShrink:0, transition:"background 0.3s" }} />
+            <span style={{ fontSize:13, color:isPaidRow?"#6ee7b7":"#d1d5db", textDecoration:isPaidRow?"line-through":"none", textDecorationColor:"rgba(110,231,183,0.35)" }}>
+              {card.name}
+            </span>
+            {urgent && <span style={{ fontSize:9, background:"rgba(251,191,36,0.13)", color:"#fbbf24", padding:"2px 7px", borderRadius:10, letterSpacing:1 }}>DUE {days===0?"TODAY":`${days}D`}</span>}
+          </div>
+          {card.statementDay && (
+            <div style={{ fontSize:9, color:"#2d2d3d", marginTop:3, paddingLeft:16 }}>
+              Stmt {card.statementDay}{nth(card.statementDay)} · Due {card.dueDay?`${card.dueDay}${nth(card.dueDay)}`:"—"}
+            </div>
+          )}
+        </div>
+
+        {/* Amount */}
+        <div style={{ display:"flex", alignItems:"center", gap:3 }}>
+          <span style={{ fontSize:11, color:"#374151" }}>$</span>
+          {isEdit ? (
+            <input autoFocus type="number" value={val}
+              onChange={e=>onUpdateCell(card.id,currentMonth,e.target.value)}
+              onBlur={()=>setEditingId(null)}
+              onKeyDown={e=>e.key==="Enter"&&setEditingId(null)}
+              style={{ background:"#1a1a2e", border:"1px solid #4f46e5", color:"#e2e8f0", padding:"6px 8px", borderRadius:6, fontSize:13, width:90, fontFamily:"'DM Mono',monospace", outline:"none", textAlign:"right" }} />
+          ) : (
+            <span onClick={()=>!isPaidRow&&setEditingId(card.id)}
+              style={{ fontSize:13, color:val!==""?(isPaidRow?"#6ee7b7":"#f1f5f9"):"#2d2d3d", minWidth:70, textAlign:"right", cursor:isPaidRow?"default":"text", padding:"6px 8px", background:"#0d0d18", borderRadius:6, display:"inline-block" }}>
+              {val!==""?parseFloat(val).toFixed(2):"0.00"}
+            </span>
+          )}
+        </div>
+
+        {/* Paid toggle */}
+        <button onClick={()=>onTogglePaid(card.id,currentMonth)}
+          style={{ padding:"6px 11px", borderRadius:6, cursor:"pointer", fontSize:10, letterSpacing:1, fontFamily:"'DM Mono',monospace", transition:"all 0.2s", border:"none",
+            background:isPaidRow?"rgba(16,185,129,0.15)":"#151525",
+            color:isPaidRow?"#10b981":"#555",
+            outline:isPaidRow?"1px solid rgba(16,185,129,0.3)":"1px solid #1e1e30" }}>
+          {isPaidRow?"✓ PAID":"PAY"}
+        </button>
+
+        <button onClick={()=>onRemoveCard(card.id)}
+          style={{ background:"transparent", border:"none", color:"#1e1e30", cursor:"pointer", fontSize:15, padding:"0 3px", transition:"color 0.15s" }}
+          onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
+          onMouseLeave={e=>e.currentTarget.style.color="#1e1e30"}>×</button>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <DueAlerts cards={cards} paid={paid} />
+      <AllPaidBanner cards={cards} paid={paid} data={data} />
+
+      {/* Summary chips */}
+      <div style={{ display:"flex", gap:10, marginBottom:18, flexWrap:"wrap" }}>
+        {[
+          {label:"TOTAL DUE", val:`$${monthTotal.toFixed(2)}`, color:"#f59e0b"},
+          {label:"PAID",      val:`$${paidTotal.toFixed(2)}`,  color:"#10b981"},
+          {label:"LEFT",      val:`$${(monthTotal-paidTotal).toFixed(2)}`, color:(monthTotal-paidTotal)<=0?"#10b981":"#ef4444"},
+        ].map(({label,val,color})=>(
+          <div key={label} style={{ flex:1, minWidth:85, background:"#0c0c18", border:"1px solid #1a1a28", borderRadius:10, padding:"10px 12px" }}>
+            <div style={{ fontSize:9, color:"#374151", letterSpacing:2 }}>{label}</div>
+            <div style={{ fontSize:18, fontFamily:"'Bebas Neue',sans-serif", color, letterSpacing:2, marginTop:2 }}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ height:3, background:"#1a1a28", borderRadius:2, marginBottom:20, overflow:"hidden" }}>
+        <div style={{ height:"100%", width:`${paidPct}%`, background:"linear-gradient(90deg,#10b981,#34d399)", borderRadius:2, transition:"width 0.5s ease" }} />
+      </div>
+
+      {/* All cards — paid ones show green inline */}
+      <div style={{ display:"flex", flexDirection:"column", gap:7, marginBottom:8 }}>
+        {cards.map(card=><CardRow key={card.id} card={card} isPaidRow={!!paid[card.id]?.[currentMonth]} />)}
+      </div>
+
+      {cards.length === 0 && (
+        <div style={{ textAlign:"center", padding:"40px 20px", color:"#252535", fontSize:13 }}>No cards yet. Add your first card below.</div>
+      )}
+
+      <button onClick={()=>setShowAddCard(true)}
+        style={{ marginTop:8, width:"100%", padding:"11px", background:"#0c0c18", border:"1px dashed #1e1e30", color:"#374151", borderRadius:10, cursor:"pointer", fontFamily:"'DM Mono',monospace", fontSize:12, letterSpacing:1, transition:"all 0.2s" }}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor="#6366f1";e.currentTarget.style.color="#818cf8";}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor="#1e1e30";e.currentTarget.style.color="#374151";}}>
+        + ADD NEW CARD
+      </button>
+    </div>
+  );
+}
+
+// ─── TAB 2: ALL MONTHS ───────────────────────────────────────────────────────
+function TabHistory({ cards, data, paid, activeMonth, setActiveMonth, onUpdateCell, onTogglePaid, showDrawer, setShowDrawer }) {
+  const [editingCell, setEditingCell] = useState(null);
+  const visibleMonths = activeMonth!==null ? [activeMonth] : MONTHS.map((_,i)=>i);
+
+  const monthTotals = useMemo(()=>
+    MONTHS.map((_,mi)=>cards.reduce((s,c)=>s+(parseFloat(data[c.id]?.[mi])||0),0)),
+    [cards,data]);
+
+  const cardTotals = useMemo(()=>{
+    const t={};
+    cards.forEach(c=>{t[c.id]=visibleMonths.reduce((s,mi)=>s+(parseFloat(data[c.id]?.[mi])||0),0);});
+    return t;
+  },[cards,data,visibleMonths]);
+
+  const grandTotal = visibleMonths.reduce((s,mi)=>s+monthTotals[mi],0);
+
+  const cellBg=(val,isPaid)=>{
+    if(isPaid) return "rgba(16,185,129,0.12)";
+    const n=parseFloat(val);
+    if(isNaN(n)||val==="") return "transparent";
+    if(n<0) return "rgba(239,68,68,0.09)";
+    if(n>1000) return "rgba(251,191,36,0.09)";
+    return "rgba(99,102,241,0.04)";
+  };
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:8 }}>
+        <div>
+          <div style={{ fontSize:10, color:"#374151", letterSpacing:2 }}>{activeMonth!==null?MONTHS[activeMonth].toUpperCase():"FULL YEAR"}</div>
+          <div style={{ fontSize:18, fontFamily:"'Bebas Neue',sans-serif", color:"#f59e0b", letterSpacing:2 }}>${grandTotal.toFixed(2)}</div>
+        </div>
+        <button onClick={()=>setShowDrawer(true)}
+          style={{ display:"flex", alignItems:"center", gap:8, background:"#0f0f1a", border:"1px solid #1a1a28", color:"#818cf8", padding:"8px 14px", borderRadius:8, cursor:"pointer", fontFamily:"'DM Mono',monospace", fontSize:11, letterSpacing:1 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:3 }}>{[0,1,2].map(i=><div key={i} style={{ width:14,height:1.5,background:"#6366f1",borderRadius:1 }} />)}</div>
+          {activeMonth!==null?MONTHS[activeMonth].toUpperCase():"ALL MONTHS"}
+        </button>
+      </div>
+
+      <div style={{ overflowX:"auto", borderRadius:10, border:"1px solid #1a1a28" }}>
+        <table style={{ borderCollapse:"collapse", width:"100%", minWidth:visibleMonths.length>1?840:300 }}>
+          <thead>
+            <tr style={{ background:"#080810" }}>
+              <th style={{ textAlign:"left", padding:"10px 14px", fontSize:9, letterSpacing:2, color:"#374151", borderBottom:"1px solid #151525", minWidth:100, position:"sticky", left:0, background:"#080810", zIndex:2 }}>CARD</th>
+              {visibleMonths.map(mi=>(
+                <th key={mi} style={{ textAlign:"right", padding:"10px 10px", fontSize:9, letterSpacing:1.5, color:mi===currentMonth?"#f59e0b":"#4f46e5", borderBottom:"1px solid #151525", minWidth:80 }}>
+                  {MONTHS[mi].toUpperCase()}{mi===currentMonth?" ★":""}
+                </th>
+              ))}
+              <th style={{ textAlign:"right", padding:"10px 14px", fontSize:9, letterSpacing:1.5, color:"#f59e0b", borderBottom:"1px solid #151525", minWidth:88 }}>TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cards.map((card,ci)=>(
+              <tr key={card.id} style={{ background:ci%2===0?"#0b0b16":"#080812" }}
+                onMouseEnter={e=>e.currentTarget.style.background="#101020"}
+                onMouseLeave={e=>e.currentTarget.style.background=ci%2===0?"#0b0b16":"#080812"}>
+                <td style={{ padding:"8px 14px", borderBottom:"1px solid #111120", position:"sticky", left:0, background:"inherit", zIndex:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+                    <div style={{ width:7, height:7, borderRadius:"50%", background:card.color, flexShrink:0 }} />
+                    <span style={{ fontSize:12, color:"#b4b4c4" }}>{card.name}</span>
+                  </div>
+                </td>
+                {visibleMonths.map(mi=>{
+                  const val=data[card.id]?.[mi];
+                  const isPaid=paid[card.id]?.[mi];
+                  const isEdit=editingCell?.c===card.id&&editingCell?.m===mi;
+                  return (
+                    <td key={mi} style={{ textAlign:"right", padding:"6px 10px", borderBottom:"1px solid #111120", background:cellBg(val,isPaid) }}>
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:5 }}>
+                        {isPaid&&<span style={{ fontSize:8, color:"#10b981" }}>✓</span>}
+                        {isEdit?(
+                          <input autoFocus type="number" value={val}
+                            onChange={e=>onUpdateCell(card.id,mi,e.target.value)}
+                            onBlur={()=>setEditingCell(null)}
+                            onKeyDown={e=>e.key==="Enter"&&setEditingCell(null)}
+                            style={{ background:"transparent", border:"none", color:"#e2e8f0", fontFamily:"'DM Mono',monospace", fontSize:12, width:68, textAlign:"right", outline:"none" }} />
+                        ):(
+                          <span onClick={()=>setEditingCell({c:card.id,m:mi})}
+                            style={{ fontSize:12, color:isPaid?"#6ee7b7":parseFloat(val)<0?"#f87171":val!==""&&val!==null?"#c4c4d4":"#252535", cursor:"text", display:"block", minWidth:46 }}>
+                            {fmt(val)||"—"}
+                          </span>
+                        )}
+                        <button onClick={()=>onTogglePaid(card.id,mi)} title={isPaid?"Unmark":"Mark paid"}
+                          style={{ background:"transparent", border:"none", cursor:"pointer", fontSize:11, color:isPaid?"#10b981":"#252535", padding:0, lineHeight:1, transition:"color 0.1s", flexShrink:0 }}
+                          onMouseEnter={e=>e.currentTarget.style.color=isPaid?"#ef4444":"#10b981"}
+                          onMouseLeave={e=>e.currentTarget.style.color=isPaid?"#10b981":"#252535"}>
+                          {isPaid?"●":"○"}
+                        </button>
+                      </div>
+                    </td>
+                  );
+                })}
+                <td style={{ textAlign:"right", padding:"8px 14px", borderBottom:"1px solid #111120" }}>
+                  <span style={{ fontSize:12, color:cardTotals[card.id]<0?"#f87171":"#f59e0b" }}>{fmt(cardTotals[card.id])}</span>
+                </td>
+              </tr>
+            ))}
+            <tr style={{ background:"#080810" }}>
+              <td style={{ padding:"10px 14px", fontSize:9, letterSpacing:2, color:"#555", position:"sticky", left:0, background:"#080810", zIndex:1 }}>TOTAL</td>
+              {visibleMonths.map(mi=>(
+                <td key={mi} style={{ textAlign:"right", padding:"10px 10px" }}>
+                  <span style={{ fontSize:12, color:"#6366f1", fontWeight:500 }}>{monthTotals[mi]?`$${monthTotals[mi].toFixed(2)}`:"—"}</span>
+                </td>
+              ))}
+              <td style={{ textAlign:"right", padding:"10px 14px" }}>
+                <span style={{ fontSize:13, color:"#f59e0b", fontWeight:500 }}>${grandTotal.toFixed(2)}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style={{ marginTop:10, display:"flex", gap:12, flexWrap:"wrap" }}>
+        {[{color:"rgba(16,185,129,0.3)",l:"Paid"},{color:"rgba(99,102,241,0.15)",l:"Normal"},{color:"rgba(251,191,36,0.2)",l:">$1k"},{color:"rgba(239,68,68,0.2)",l:"Credit"}].map(({color,l})=>(
+          <div key={l} style={{ display:"flex", alignItems:"center", gap:5 }}>
+            <div style={{ width:8,height:8,borderRadius:2,background:color,border:"1px solid rgba(255,255,255,0.06)" }} />
+            <span style={{ fontSize:9, color:"#374151", letterSpacing:1 }}>{l.toUpperCase()}</span>
+          </div>
+        ))}
+        <span style={{ fontSize:9, color:"#1e1e2e", marginLeft:"auto" }}>Click cell to edit · ○● toggle paid</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── TAB 3: STATISTICS ───────────────────────────────────────────────────────
+function TabStats({ cards, data, paid }) {
+  const monthTotals     = MONTHS.map((_,mi)=>cards.reduce((s,c)=>s+(parseFloat(data[c.id]?.[mi])||0),0));
+  const paidMonthTotals = MONTHS.map((_,mi)=>cards.reduce((s,c)=>paid[c.id]?.[mi]?(s+(parseFloat(data[c.id]?.[mi])||0)):s,0));
+  const grandTotal = monthTotals.reduce((a,b)=>a+b,0);
+  const totalPaid  = paidMonthTotals.reduce((a,b)=>a+b,0);
+  const avgMonthly = (() => { const a=monthTotals.filter(t=>t>0); return a.length?a.reduce((x,y)=>x+y,0)/a.length:0; })();
+  const highestMonthIdx = monthTotals.indexOf(Math.max(...monthTotals));
+  const lowestMonthIdx  = monthTotals.reduce((b,t,i)=>t>0&&(b===-1||t<monthTotals[b])?i:b,-1);
+  const barData  = MONTHS.map((m,i)=>({ month:m, Total:+monthTotals[i].toFixed(2), Paid:+paidMonthTotals[i].toFixed(2) }));
+  const lineData = MONTHS.map((m,i)=>({ month:m, Spend:+monthTotals[i].toFixed(2) }));
+  const cardTotals = cards.map(c=>({ name:c.name, color:c.color, total:MONTHS.reduce((s,_,mi)=>s+(parseFloat(data[c.id]?.[mi])||0),0) })).filter(c=>c.total>0).sort((a,b)=>b.total-a.total);
+
+  const CT = ({active,payload,label})=>{
+    if(!active||!payload?.length) return null;
+    return (
+      <div style={{ background:"#0f0f1a", border:"1px solid #1a1a28", borderRadius:8, padding:"9px 13px" }}>
+        <div style={{ fontSize:10, color:"#555", marginBottom:5 }}>{label}</div>
+        {payload.map(p=><div key={p.name} style={{ fontSize:12, color:p.color, marginBottom:2 }}>{p.name}: ${p.value.toFixed(2)}</div>)}
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:8, marginBottom:20 }}>
+        {[
+          {label:"YEAR TOTAL",    val:`$${grandTotal.toFixed(2)}`,      color:"#f59e0b"},
+          {label:"TOTAL PAID",    val:`$${totalPaid.toFixed(2)}`,        color:"#10b981"},
+          {label:"OUTSTANDING",   val:`$${(grandTotal-totalPaid).toFixed(2)}`,color:"#ef4444"},
+          {label:"AVG / MONTH",   val:`$${avgMonthly.toFixed(2)}`,       color:"#818cf8"},
+          {label:"HIGHEST MONTH", val:grandTotal>0?MONTHS[highestMonthIdx]:"—", color:"#f97316"},
+          {label:"LOWEST MONTH",  val:lowestMonthIdx>=0?MONTHS[lowestMonthIdx]:"—",color:"#06b6d4"},
+        ].map(({label,val,color})=>(
+          <div key={label} style={{ background:"#0c0c18", border:"1px solid #1a1a28", borderRadius:10, padding:"11px 12px" }}>
+            <div style={{ fontSize:9, letterSpacing:2, color:"#374151" }}>{label}</div>
+            <div style={{ fontSize:17, fontFamily:"'Bebas Neue',sans-serif", color, letterSpacing:1.5, marginTop:3 }}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background:"#0c0c18", border:"1px solid #1a1a28", borderRadius:12, padding:"16px 12px", marginBottom:12 }}>
+        <div style={{ fontSize:9, letterSpacing:2, color:"#374151", marginBottom:12 }}>MONTHLY SPEND VS PAID</div>
+        {grandTotal===0?<div style={{ textAlign:"center", color:"#252535", fontSize:12, padding:"24px 0" }}>No data yet</div>:(
+          <ResponsiveContainer width="100%" height={170}>
+            <BarChart data={barData} margin={{top:0,right:0,bottom:0,left:0}}>
+              <XAxis dataKey="month" tick={{fill:"#374151",fontSize:9}} axisLine={false} tickLine={false} />
+              <YAxis tick={{fill:"#374151",fontSize:9}} axisLine={false} tickLine={false} width={48} tickFormatter={v=>`$${v}`} />
+              <Tooltip content={<CT />} />
+              <Bar dataKey="Total" fill="#4f46e5" radius={[3,3,0,0]} opacity={0.7} />
+              <Bar dataKey="Paid"  fill="#10b981" radius={[3,3,0,0]} opacity={0.9} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      <div style={{ background:"#0c0c18", border:"1px solid #1a1a28", borderRadius:12, padding:"16px 12px", marginBottom:12 }}>
+        <div style={{ fontSize:9, letterSpacing:2, color:"#374151", marginBottom:12 }}>SPEND TREND</div>
+        {grandTotal===0?<div style={{ textAlign:"center", color:"#252535", fontSize:12, padding:"24px 0" }}>No data yet</div>:(
+          <ResponsiveContainer width="100%" height={130}>
+            <LineChart data={lineData} margin={{top:0,right:10,bottom:0,left:0}}>
+              <XAxis dataKey="month" tick={{fill:"#374151",fontSize:9}} axisLine={false} tickLine={false} />
+              <YAxis tick={{fill:"#374151",fontSize:9}} axisLine={false} tickLine={false} width={48} tickFormatter={v=>`$${v}`} />
+              <Tooltip content={<CT />} />
+              <Line type="monotone" dataKey="Spend" stroke="#f59e0b" strokeWidth={2} dot={{fill:"#f59e0b",r:3}} activeDot={{r:5}} />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      <div style={{ background:"#0c0c18", border:"1px solid #1a1a28", borderRadius:12, padding:"16px 12px" }}>
+        <div style={{ fontSize:9, letterSpacing:2, color:"#374151", marginBottom:14 }}>SPEND BY CARD</div>
+        {cardTotals.length===0?<div style={{ textAlign:"center", color:"#252535", fontSize:12, padding:"24px 0" }}>No data yet</div>:(
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, alignItems:"center" }}>
+            <ResponsiveContainer width="100%" height={170}>
+              <PieChart>
+                <Pie data={cardTotals} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={72} innerRadius={36}>
+                  {cardTotals.map((c,i)=><Cell key={i} fill={c.color} />)}
+                </Pie>
+                <Tooltip formatter={v=>`$${parseFloat(v).toFixed(2)}`} contentStyle={{ background:"#0f0f1a", border:"1px solid #1a1a28", borderRadius:8, fontFamily:"'DM Mono',monospace", fontSize:11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
+              {cardTotals.map(c=>(
+                <div key={c.name}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                    <span style={{ fontSize:10, color:"#b4b4c4", display:"flex", alignItems:"center", gap:5 }}>
+                      <span style={{ width:6,height:6,borderRadius:"50%",background:c.color,display:"inline-block" }} />{c.name}
+                    </span>
+                    <span style={{ fontSize:10, color:"#f59e0b" }}>${c.total.toFixed(0)}</span>
+                  </div>
+                  <div style={{ height:2.5, background:"#1a1a28", borderRadius:2 }}>
+                    <div style={{ height:"100%", width:`${grandTotal>0?(c.total/grandTotal)*100:0}%`, background:c.color, borderRadius:2 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── TAB 4: CREDIT SCORE TIPS ────────────────────────────────────────────────
+const TIPS = [
+  {
+    icon:"💳", category:"PAYMENT HISTORY", impact:"HIGH IMPACT", impactColor:"#ef4444",
+    title:"Always Pay On Time",
+    body:"Payment history makes up 35% of your credit score — the single biggest factor. Even one missed payment can drop your score by 50–100 points. Set up autopay for at least the minimum balance to never miss a due date.",
+    tips:["Set autopay for minimum payments","Pay statement balance in full to avoid interest","If you missed a payment, pay it ASAP — the damage grows over time"],
+  },
+  {
+    icon:"📊", category:"CREDIT UTILIZATION", impact:"HIGH IMPACT", impactColor:"#ef4444",
+    title:"Keep Utilization Below 30%",
+    body:"Credit utilization (balance ÷ credit limit) accounts for 30% of your score. Staying under 30% is good — under 10% is excellent. High utilization signals financial stress to lenders.",
+    tips:["Pay balances twice a month to lower reported utilization","Request a credit limit increase (without a hard pull if possible)","Spread purchases across multiple cards"],
+  },
+  {
+    icon:"📅", category:"CREDIT AGE", impact:"MEDIUM IMPACT", impactColor:"#f59e0b",
+    title:"Keep Old Accounts Open",
+    body:"The average age of your credit accounts makes up 15% of your score. Closing old cards shortens your credit history and can hurt your score even if you never use them.",
+    tips:["Keep your oldest card open — use it for small recurring bills","Avoid opening too many new accounts at once","If you must close a card, close newer ones first"],
+  },
+  {
+    icon:"🔍", category:"CREDIT MIX", impact:"MEDIUM IMPACT", impactColor:"#f59e0b",
+    title:"Diversify Your Credit Types",
+    body:"Having a mix of credit types (credit cards, car loans, mortgage, lines of credit) shows lenders you can manage different kinds of debt responsibly. This accounts for 10% of your score.",
+    tips:["Don't take out loans just for the mix — only borrow what you need","A mix of revolving (cards) and installment (loans) credit is ideal","Student loans and car loans both contribute positively"],
+  },
+  {
+    icon:"🆕", category:"NEW CREDIT", impact:"LOW IMPACT", impactColor:"#10b981",
+    title:"Limit Hard Inquiries",
+    body:"Every time you apply for new credit, a hard inquiry is added to your report and can lower your score by a few points. Multiple applications in a short time signal risk. This accounts for 10% of your score.",
+    tips:["Only apply for credit you actually need","Rate shopping for mortgages/auto loans within 14–45 days counts as one inquiry","Check pre-approval offers — they use soft pulls that don't affect your score"],
+  },
+  {
+    icon:"📋", category:"CREDIT REPORT", impact:"ESSENTIAL", impactColor:"#818cf8",
+    title:"Monitor Your Credit Report",
+    body:"Errors on your credit report are more common than you'd think. Incorrect late payments, duplicate accounts, or fraud can silently damage your score. You're entitled to free reports regularly.",
+    tips:["Check your report from all 3 bureaus (Equifax, TransUnion, Experian)","Dispute any errors directly with the bureau","Consider a credit monitoring service for real-time alerts"],
+  },
+  {
+    icon:"⚡", category:"QUICK WINS", impact:"FAST RESULTS", impactColor:"#06b6d4",
+    title:"Fast Ways to Boost Your Score",
+    body:"Some actions have a faster impact than others. If you need a score bump before a big purchase like a home or car, focus on these first.",
+    tips:["Pay down revolving balances to lower utilization immediately","Become an authorized user on a family member's old, healthy account","Ask for a goodwill removal of a single late payment from a card you've always been good with","Dispute and remove any inaccurate negative items"],
+  },
+  {
+    icon:"🏦", category:"SECURED CREDIT", impact:"BUILDING CREDIT", impactColor:"#a78bfa",
+    title:"Building Credit From Scratch",
+    body:"If you have no credit history or are rebuilding after issues, secured products are the safest entry point. They require a deposit that becomes your limit, removing risk for the lender.",
+    tips:["Open a secured credit card with a $200–500 deposit","Use it for small predictable purchases (gas, groceries)","Pay the full balance every month — no interest, builds history fast","After 12 months of on-time payments, ask to graduate to an unsecured card"],
+  },
+];
+
+function TabTips() {
+  const [expanded, setExpanded] = useState(null);
+
+  return (
+    <div>
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontSize:11, color:"#374151", letterSpacing:2, marginBottom:4 }}>KNOWLEDGE BASE</div>
+        <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:28, letterSpacing:2, color:"#f1f5f9", lineHeight:1 }}>IMPROVE YOUR CREDIT</div>
+        <div style={{ fontSize:11, color:"#374151", marginTop:6, lineHeight:1.6 }}>
+          Your credit score is calculated from 5 key factors. Tap any card to learn more.
+        </div>
+      </div>
+
+      {/* Score breakdown visual */}
+      <div style={{ background:"#0c0c18", border:"1px solid #1a1a28", borderRadius:12, padding:"16px 14px", marginBottom:20 }}>
+        <div style={{ fontSize:9, letterSpacing:2, color:"#374151", marginBottom:12 }}>SCORE FACTOR WEIGHT</div>
+        {[
+          {label:"Payment History",    pct:35, color:"#ef4444"},
+          {label:"Credit Utilization", pct:30, color:"#f97316"},
+          {label:"Credit Age",         pct:15, color:"#f59e0b"},
+          {label:"Credit Mix",         pct:10, color:"#10b981"},
+          {label:"New Credit",         pct:10, color:"#818cf8"},
+        ].map(({label,pct,color})=>(
+          <div key={label} style={{ marginBottom:9 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+              <span style={{ fontSize:11, color:"#b4b4c4" }}>{label}</span>
+              <span style={{ fontSize:11, color, fontWeight:500 }}>{pct}%</span>
+            </div>
+            <div style={{ height:5, background:"#1a1a28", borderRadius:3 }}>
+              <div style={{ height:"100%", width:`${pct}%`, background:color, borderRadius:3, opacity:0.85 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tip cards */}
+      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+        {TIPS.map((tip,i) => {
+          const isOpen = expanded === i;
+          return (
+            <div key={i}
+              style={{ background:"#0c0c18", border:`1px solid ${isOpen?"#252545":"#1a1a28"}`, borderRadius:12, overflow:"hidden", transition:"border 0.2s" }}>
+              <button onClick={()=>setExpanded(isOpen?null:i)}
+                style={{ width:"100%", background:"transparent", border:"none", padding:"14px 16px", cursor:"pointer", display:"flex", alignItems:"center", gap:12, textAlign:"left" }}>
+                <span style={{ fontSize:20, flexShrink:0 }}>{tip.icon}</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:3 }}>
+                    <span style={{ fontSize:9, color:tip.impactColor, background:`${tip.impactColor}18`, padding:"2px 7px", borderRadius:10, letterSpacing:1 }}>{tip.impact}</span>
+                    <span style={{ fontSize:9, color:"#374151", letterSpacing:1 }}>{tip.category}</span>
+                  </div>
+                  <div style={{ fontSize:13, color:"#d1d5db", fontFamily:"'DM Mono',monospace" }}>{tip.title}</div>
+                </div>
+                <span style={{ color:"#4b5563", fontSize:14, transition:"transform 0.2s", transform:isOpen?"rotate(180deg)":"rotate(0deg)", flexShrink:0 }}>▾</span>
+              </button>
+              {isOpen && (
+                <div style={{ padding:"0 16px 16px", borderTop:"1px solid #151525" }}>
+                  <p style={{ fontSize:12, color:"#6b7280", lineHeight:1.8, margin:"12px 0 14px" }}>{tip.body}</p>
+                  <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                    {tip.tips.map((t,j)=>(
+                      <div key={j} style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+                        <span style={{ color:tip.impactColor, fontSize:12, marginTop:1, flexShrink:0 }}>→</span>
+                        <span style={{ fontSize:12, color:"#9ca3af", lineHeight:1.6 }}>{t}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop:20, padding:"14px 16px", background:"rgba(99,102,241,0.06)", border:"1px solid rgba(99,102,241,0.15)", borderRadius:10 }}>
+        <div style={{ fontSize:10, color:"#6366f1", letterSpacing:1, marginBottom:6 }}>📌 REMEMBER</div>
+        <div style={{ fontSize:11, color:"#4b5563", lineHeight:1.8 }}>
+          Credit scores improve gradually with consistent habits. Focus on paying on time and keeping balances low — those two factors alone control 65% of your score.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ROOT ────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [tab, setTab]         = useState(0);
+  const [cards, setCards]     = useState([]);
+  const [data,  setData]      = useState({});
+  const [paid,  setPaid]      = useState({});
+  const [showAddCard, setShowAddCard] = useState(false);
+  const [showDrawer,  setShowDrawer]  = useState(false);
+  const [activeMonth, setActiveMonth] = useState(null);
+
+  const addCard = ({ name, statementDay, dueDay }) => {
+    const id    = Date.now();
+    const color = COLORS_PALETTE[cards.length % COLORS_PALETTE.length];
+    setCards(prev=>[...prev,{id,name,color,statementDay,dueDay}]);
+    setData(prev=>{const e={};MONTHS.forEach((_,mi)=>{e[mi]="";});return{...prev,[id]:e};});
+    setPaid(prev=>{const e={};MONTHS.forEach((_,mi)=>{e[mi]=false;});return{...prev,[id]:e};});
+  };
+
+  const removeCard = id => {
+    setCards(prev=>prev.filter(c=>c.id!==id));
+    setData(prev=>{const d={...prev};delete d[id];return d;});
+    setPaid(prev=>{const d={...prev};delete d[id];return d;});
+  };
+
+  const updateCell = (cardId,mi,val) =>
+    setData(prev=>({...prev,[cardId]:{...prev[cardId],[mi]:val}}));
+
+  const togglePaid = (cardId,mi) =>
+    setPaid(prev=>({...prev,[cardId]:{...prev[cardId],[mi]:!prev[cardId]?.[mi]}}));
+
+  const TABS = [
+    {icon:"📋", label:"THIS MONTH"},
+    {icon:"📅", label:"ALL MONTHS"},
+    {icon:"📈", label:"STATS"},
+    {icon:"💡", label:"TIPS"},
+  ];
+
+  return (
+    <div style={{ minHeight:"100vh", background:"#07070d", fontFamily:"'DM Mono','Courier New',monospace", color:"#e2e8f0", padding:"20px 14px 50px" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap');
+        *{box-sizing:border-box;}
+        ::-webkit-scrollbar{height:4px;width:4px;}
+        ::-webkit-scrollbar-track{background:#0a0a12;}
+        ::-webkit-scrollbar-thumb{background:#252535;border-radius:2px;}
+        input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+        input[type=number]{-moz-appearance:textfield;}
+        input::placeholder{color:#252535;}
+      `}</style>
+
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
+        <div>
+          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:28, letterSpacing:3, color:"#f1f5f9", lineHeight:1 }}>CREDIT TRACKER</div>
+          <div style={{ fontSize:9, color:"#252535", marginTop:2, letterSpacing:1 }}>{MONTHS[currentMonth].toUpperCase()} {today.getFullYear()}</div>
+        </div>
+        {tab===1 && (
+          <button onClick={()=>setShowDrawer(true)}
+            style={{ display:"flex", flexDirection:"column", gap:3.5, background:"transparent", border:"none", cursor:"pointer", padding:8 }}>
+            {[0,1,2].map(i=><div key={i} style={{ width:18,height:2,background:"#6366f1",borderRadius:1 }} />)}
+          </button>
+        )}
+      </div>
+
+      {/* Tab bar */}
+      <div style={{ display:"flex", background:"#0a0a14", borderRadius:10, padding:3, marginBottom:18, border:"1px solid #1a1a28" }}>
+        {TABS.map((t,i)=>(
+          <button key={i} onClick={()=>setTab(i)}
+            style={{ flex:1, padding:"8px 4px", border:"none", borderRadius:7, cursor:"pointer", fontSize:9, letterSpacing:0.8, fontFamily:"'DM Mono',monospace", transition:"all 0.2s",
+              background:tab===i?"#14142e":"transparent",
+              color:tab===i?"#818cf8":"#374151" }}>
+            <span style={{ display:"block", fontSize:16, marginBottom:2 }}>{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab===0 && <TabEntry cards={cards} data={data} paid={paid} onUpdateCell={updateCell} onTogglePaid={togglePaid} onRemoveCard={removeCard} setShowAddCard={setShowAddCard} />}
+      {tab===1 && <TabHistory cards={cards} data={data} paid={paid} activeMonth={activeMonth} setActiveMonth={setActiveMonth} onUpdateCell={updateCell} onTogglePaid={togglePaid} showDrawer={showDrawer} setShowDrawer={setShowDrawer} />}
+      {tab===2 && <TabStats cards={cards} data={data} paid={paid} />}
+      {tab===3 && <TabTips />}
+
+      {showDrawer  && <MonthDrawer activeMonth={activeMonth} setActiveMonth={setActiveMonth} onClose={()=>setShowDrawer(false)} />}
+      {showAddCard && <AddCardModal onAdd={addCard} onClose={()=>setShowAddCard(false)} />}
+    </div>
+  );
+}
