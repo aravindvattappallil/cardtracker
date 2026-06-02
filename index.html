@@ -295,6 +295,24 @@ function fmtAmt(n){const v=parseFloat(n);return isNaN(v)?0:v;}
 function getDaysUntilDue(dueDay){if(!dueDay)return null;const due=new Date(CUR_YEAR,CUR_MONTH,dueDay);return Math.ceil((due-today)/(1000*60*60*24));}
 function genId(){return Date.now()+Math.random();}
 
+// ── localStorage persistence ───────────────────────────────────────────────
+const LS_KEY = 'creditTracker_v1';
+function saveState(){
+  try{
+    localStorage.setItem(LS_KEY, JSON.stringify({cards, data, paid}));
+  }catch(e){console.warn('Save failed',e);}
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    if(s.cards) cards = s.cards;
+    if(s.data)  data  = s.data;
+    if(s.paid)  paid  = s.paid;
+  }catch(e){console.warn('Load failed',e);}
+}
+
 // ── Tab switching ──────────────────────────────────────────────────────────
 function switchTab(i){
   document.querySelectorAll('.tab-btn').forEach((b,j)=>b.classList.toggle('active',i===j));
@@ -326,6 +344,7 @@ function submitAddCard(){
   data[id] = {}; paid[id] = {};
   MONTHS.forEach((_,mi)=>{data[id][mi]=""; paid[id][mi]=false;});
   closeAddModal();
+  saveState();
   renderAll();
 }
 
@@ -333,12 +352,14 @@ function submitAddCard(){
 function removeCard(id){
   cards = cards.filter(c=>c.id!==id);
   delete data[id]; delete paid[id];
+  saveState();
   renderAll();
 }
 
 // ── UPDATE CELL ────────────────────────────────────────────────────────────
 function updateCell(id, mi, val){
   data[id][mi] = val;
+  saveState();
   renderTab0Summary();
   if(activeTab===1) renderTab1();
   if(activeTab===2) renderTab2();
@@ -347,6 +368,7 @@ function updateCell(id, mi, val){
 // ── TOGGLE PAID ────────────────────────────────────────────────────────────
 function togglePaid(id, mi){
   paid[id][mi] = !paid[id][mi];
+  saveState();
   renderAll();
 }
 
@@ -459,8 +481,17 @@ function startEdit(id){
 }
 function endEdit(id){
   const inp = document.getElementById(`inp-${id}`);
+  const val = inp.value;
+  // Update state
+  data[id][CUR_MONTH] = val;
+  saveState();
+  // Swap back to display and update its text immediately — no re-render needed
   inp.classList.add('hidden');
-  document.getElementById(`amt-${id}`).classList.remove('hidden');
+  const disp = document.getElementById(`amt-${id}`);
+  disp.textContent = val!==''?parseFloat(val).toFixed(2):'0.00';
+  const isPaid = !!paid[id]?.[CUR_MONTH];
+  disp.style.color = val!==''?(isPaid?'#6ee7b7':'#f1f5f9'):'#2d2d3d';
+  disp.classList.remove('hidden');
   renderTab0Summary();
 }
 
@@ -734,6 +765,7 @@ function buildTips(){
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
+loadState();
 buildTips();
 renderAll();
 </script>
