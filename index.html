@@ -30,11 +30,6 @@ button{cursor:pointer;font-family:'DM Mono',monospace;}
 .flex-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 
 /* ── Auth screen ── */
-#auth-screen{position:fixed;inset:0;background:#07070d;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;}
-#auth-screen.hidden{display:none!important;}
-.google-btn{display:flex;align-items:center;gap:12px;background:#fff;color:#1a1a1a;border:none;padding:14px 24px;border-radius:10px;font-size:14px;font-weight:600;font-family:'DM Mono',monospace;cursor:pointer;transition:opacity .2s;margin-top:28px;}
-.google-btn:hover{opacity:.9;}
-.google-btn svg{flex-shrink:0;}
 .sync-bar{position:fixed;top:0;left:0;right:0;z-index:150;padding:8px 16px;font-size:10px;letter-spacing:1px;text-align:center;display:none;align-items:center;justify-content:center;gap:8px;}
 .sync-bar.show{display:flex;}
 .sync-bar.syncing{background:rgba(99,102,241,.9);color:#c7d2fe;}
@@ -140,36 +135,28 @@ canvas{max-width:100%;}
   <span id="sync-text">Syncing...</span>
 </div>
 
-<!-- AUTH SCREEN -->
-<div id="auth-screen">
-  <div style="text-align:center;">
-    <div class="bebas" style="font-size:42px;color:#f1f5f9;line-height:1;">CREDIT TRACKER</div>
-    <div style="font-size:11px;color:#374151;margin-top:6px;letter-spacing:2px;">PERSONAL BILL MANAGER</div>
-    <div style="margin-top:40px;padding:20px;background:#0c0c18;border:1px solid #1a1a28;border-radius:14px;max-width:340px;">
-      <div style="font-size:12px;color:#6b7280;line-height:1.8;margin-bottom:4px;">Sign in to sync your data across devices and keep it safe in the cloud.</div>
-      <button class="google-btn" onclick="signInGoogle()">
-        <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.5 2.4 30 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.8 6C12.2 13.1 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8C43.7 37.5 46.5 31.4 46.5 24.5z"/><path fill="#FBBC05" d="M10.4 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.8-6A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6 0 11.1-2 14.8-5.4l-7.5-5.8c-2 1.4-4.6 2.2-7.3 2.2-6.3 0-11.7-4.2-13.6-9.9l-7.8 6C6.6 42.6 14.6 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
-        Continue with Google
-      </button>
-      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #1a1a28;font-size:10px;color:#252535;text-align:center;">Your data is private and only visible to you</div>
-    </div>
-  </div>
-</div>
-
 <!-- MAIN APP -->
-<div id="app-content" class="hidden">
+<div id="app-content">
 
 
 
-  <!-- User bar -->
-  <div class="user-bar" id="user-bar">
-    <img id="user-avatar" class="user-avatar" src="" alt="" onerror="this.style.display='none'"/>
-    <div class="user-info">
-      <div class="user-name" id="user-name">Loading...</div>
-      <div class="user-email" id="user-email"></div>
+  <!-- Optional cloud sync bar -->
+  <div id="user-bar" style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:9px 14px;background:#0c0c18;border:1px solid #1a1a28;border-radius:10px;">
+    <!-- Logged out state -->
+    <div id="bar-loggedout" style="display:flex;align-items:center;gap:10px;width:100%;">
+      <span style="font-size:11px;color:#374151;flex:1;">☁ Sign in to back up &amp; sync your data</span>
+      <button onclick="signInGoogle()" style="display:flex;align-items:center;gap:7px;background:#1a1a2e;border:1px solid #4f46e5;color:#818cf8;padding:6px 12px;border-radius:7px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;white-space:nowrap;">
+        <svg width="13" height="13" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.5 2.4 30 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.8 6C12.2 13.1 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8C43.7 37.5 46.5 31.4 46.5 24.5z"/><path fill="#FBBC05" d="M10.4 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.8-6A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6 0 11.1-2 14.8-5.4l-7.5-5.8c-2 1.4-4.6 2.2-7.3 2.2-6.3 0-11.7-4.2-13.6-9.9l-7.8 6C6.6 42.6 14.6 48 24 48z"/></svg>
+        SIGN IN
+      </button>
     </div>
-    <div style="display:flex;align-items:center;gap:6px;">
-      <div id="cloud-status" style="font-size:9px;color:#252535;letter-spacing:1px;"></div>
+    <!-- Logged in state -->
+    <div id="bar-loggedin" style="display:none;align-items:center;gap:10px;width:100%;">
+      <img id="user-avatar" class="user-avatar" src="" alt="" style="width:26px;height:26px;border-radius:50%;border:1px solid #252545;" onerror="this.style.display='none'"/>
+      <div style="flex:1;min-width:0;">
+        <div id="user-name" style="font-size:11px;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+        <div id="cloud-status" style="font-size:9px;color:#374151;letter-spacing:.5px;"></div>
+      </div>
       <button class="sign-out-btn" onclick="signOut()">SIGN OUT</button>
     </div>
   </div>
@@ -450,20 +437,7 @@ async function loadFromCloud(){
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 function signInGoogle(){
-  if(!FIREBASE_CONFIGURED){
-    // Show app in offline mode
-    document.getElementById('auth-screen').classList.add('hidden');
-    document.getElementById('app-content').classList.remove('hidden');
-    document.getElementById('user-name').textContent='Offline Mode';
-    document.getElementById('user-email').textContent='Data saved locally only';
-    document.getElementById('user-avatar').style.display='none';
-    document.getElementById('cloud-status').textContent='⚡ LOCAL ONLY';
-    document.getElementById('cloud-status').style.color='#f59e0b';
-    loadLocal();
-    buildTips();
-    renderAll();
-    return;
-  }
+  if(!FIREBASE_CONFIGURED){ alert('Firebase not configured yet.'); return; }
   const provider = new firebase.auth.GoogleAuthProvider();
   auth.signInWithPopup(provider).catch(e=>alert('Sign-in failed: '+e.message));
 }
@@ -471,9 +445,10 @@ function signInGoogle(){
 function signOut(){
   if(unsubFirestore) unsubFirestore();
   if(auth) auth.signOut();
-  cards=[];data={};paid={};
-  document.getElementById('auth-screen').classList.remove('hidden');
-  document.getElementById('app-content').classList.add('hidden');
+  currentUser = null;
+  document.getElementById('bar-loggedin').style.display='none';
+  document.getElementById('bar-loggedout').style.display='flex';
+  document.getElementById('cloud-status').textContent='';
 }
 
 // ── Auth state listener ────────────────────────────────────────────────────
@@ -481,28 +456,21 @@ if(FIREBASE_CONFIGURED){
   auth.onAuthStateChanged(async user=>{
     if(user){
       currentUser = user;
-      document.getElementById('auth-screen').classList.add('hidden');
-      document.getElementById('app-content').classList.remove('hidden');
-      // Show user info
-      document.getElementById('user-name').textContent  = user.displayName||'User';
-      document.getElementById('user-email').textContent = user.email||'';
-      if(user.photoURL){
-        document.getElementById('user-avatar').src = user.photoURL;
-        document.getElementById('user-avatar').style.display='block';
-      }
-      // Load local first for instant render, then cloud
-      loadLocal();
-      buildTips();
-      renderAll();
+      document.getElementById('bar-loggedout').style.display='none';
+      document.getElementById('bar-loggedin').style.display='flex';
+      document.getElementById('user-name').textContent = user.displayName||user.email||'User';
+      if(user.photoURL) document.getElementById('user-avatar').src = user.photoURL;
+      document.getElementById('cloud-status').textContent='☁ Syncing...';
       await loadFromCloud();
       startRealtimeSync();
       renderAll();
     } else {
       currentUser = null;
+      document.getElementById('bar-loggedin').style.display='none';
+      document.getElementById('bar-loggedout').style.display='flex';
+      document.getElementById('cloud-status').textContent='';
     }
   });
-} else {
-  // No Firebase — show setup notice inline but keep auth screen for UX
 }
 
 // ── Online/offline detection ───────────────────────────────────────────────
@@ -853,12 +821,9 @@ const mBlob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
 document.getElementById('manifest-link').href=URL.createObjectURL(mBlob);
 
 // ── INIT ───────────────────────────────────────────────────────────────────
-// If not firebase configured, show app directly with local data
-if(!FIREBASE_CONFIGURED){
-  // Keep auth screen but make "continue with Google" work offline
-}
+loadLocal();
 buildTips();
-// Don't call renderAll here — wait for auth state or offline login
+renderAll();
 </script>
 </body>
 </html>
