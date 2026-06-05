@@ -11,9 +11,9 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <!-- Firebase v9 compat (works as global scripts) -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:#07070d;color:#e2e8f0;font-family:'DM Mono','Courier New',monospace;min-height:100vh;padding:20px 14px 60px;}
@@ -124,7 +124,26 @@ canvas{max-width:100%;}
 .badge{font-size:9px;padding:2px 7px;border-radius:10px;letter-spacing:1px;}
 .subtitle{font-size:9px;color:#2d2d3d;margin-top:3px;padding-left:16px;}
 
-/* Setup banner */
+
+/* Settings */
+.settings-section{margin-bottom:20px;}
+.settings-section-title{font-size:9px;letter-spacing:2px;color:#4b5563;margin-bottom:10px;padding:0 2px;}
+.settings-row{display:flex;align-items:center;gap:12px;padding:13px 16px;background:#0c0c18;border:1px solid #1a1a28;border-radius:10px;margin-bottom:6px;}
+.settings-row-icon{font-size:18px;flex-shrink:0;}
+.settings-row-info{flex:1;min-width:0;}
+.settings-row-label{font-size:12px;color:#d1d5db;}
+.settings-row-sub{font-size:10px;color:#374151;margin-top:2px;}
+.toggle-switch{position:relative;width:40px;height:22px;flex-shrink:0;}
+.toggle-switch input{opacity:0;width:0;height:0;}
+.toggle-slider{position:absolute;inset:0;background:#1a1a28;border-radius:11px;transition:.3s;border:1px solid #252535;}
+.toggle-slider:before{content:'';position:absolute;height:16px;width:16px;left:2px;bottom:2px;background:#374151;border-radius:50%;transition:.3s;}
+.toggle-switch input:checked+.toggle-slider{background:rgba(99,102,241,.3);border-color:#4f46e5;}
+.toggle-switch input:checked+.toggle-slider:before{transform:translateX(18px);background:#818cf8;}
+.settings-btn{width:100%;padding:13px 16px;background:#0c0c18;border:1px solid #1a1a28;border-radius:10px;color:#d1d5db;font-family:'DM Mono',monospace;font-size:12px;text-align:left;display:flex;align-items:center;gap:12px;margin-bottom:6px;transition:all .2s;}
+.settings-btn:hover{border-color:#252545;background:#0f0f1a;}
+.settings-btn.danger{color:#f87171;}
+.settings-btn.danger:hover{border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.05);}
+.settings-btn-chevron{margin-left:auto;color:#374151;font-size:12px;}
 </style>
 </head>
 <body>
@@ -176,10 +195,11 @@ canvas{max-width:100%;}
 
   <!-- TAB BAR -->
   <div class="tab-bar">
-    <button class="tab-btn active" onclick="switchTab(0)"><span class="tab-icon">📋</span>THIS MONTH</button>
-    <button class="tab-btn" onclick="switchTab(1)"><span class="tab-icon">📅</span>ALL MONTHS</button>
+    <button class="tab-btn active" onclick="switchTab(0)"><span class="tab-icon">📋</span>MONTH</button>
+    <button class="tab-btn" onclick="switchTab(1)"><span class="tab-icon">📅</span>ALL</button>
     <button class="tab-btn" onclick="switchTab(2)"><span class="tab-icon">📈</span>STATS</button>
     <button class="tab-btn" onclick="switchTab(3)"><span class="tab-icon">💡</span>TIPS</button>
+    <button class="tab-btn" onclick="switchTab(4)"><span class="tab-icon">⚙️</span>SETTINGS</button>
   </div>
 
   <!-- TAB 0 -->
@@ -256,6 +276,149 @@ canvas{max-width:100%;}
     </div>
   </div>
 
+
+  <!-- TAB 4: SETTINGS -->
+  <div id="tab-4" class="hidden">
+
+    <!-- Account -->
+    <div class="settings-section">
+      <div class="settings-section-title">ACCOUNT</div>
+      <div id="settings-account-loggedout" class="settings-row">
+        <span class="settings-row-icon">👤</span>
+        <div class="settings-row-info">
+          <div class="settings-row-label">Not signed in</div>
+          <div class="settings-row-sub">Sign in to sync across devices</div>
+        </div>
+        <button onclick="signInGoogle()" style="display:flex;align-items:center;gap:7px;background:#1a1a2e;border:1px solid #4f46e5;color:#818cf8;padding:7px 12px;border-radius:7px;font-family:'DM Mono',monospace;font-size:10px;white-space:nowrap;">
+          <svg width="12" height="12" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.5 2.4 30 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.8 6C12.2 13.1 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8C43.7 37.5 46.5 31.4 46.5 24.5z"/><path fill="#FBBC05" d="M10.4 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.8-6A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6 0 11.1-2 14.8-5.4l-7.5-5.8c-2 1.4-4.6 2.2-7.3 2.2-6.3 0-11.7-4.2-13.6-9.9l-7.8 6C6.6 42.6 14.6 48 24 48z"/></svg>
+          SIGN IN
+        </button>
+      </div>
+      <div id="settings-account-loggedin" style="display:none;" class="settings-row">
+        <img id="settings-avatar" style="width:36px;height:36px;border-radius:50%;border:2px solid #252545;flex-shrink:0;" src="" alt="" onerror="this.style.display='none'"/>
+        <div class="settings-row-info">
+          <div class="settings-row-label" id="settings-name">—</div>
+          <div class="settings-row-sub" id="settings-email">—</div>
+        </div>
+        <div id="settings-cloud-dot" style="width:7px;height:7px;border-radius:50%;background:#10b981;flex-shrink:0;" title="Synced"></div>
+      </div>
+      <div id="settings-signout-row" style="display:none;" class="settings-row" style="cursor:pointer;" onclick="signOut()">
+        <span class="settings-row-icon">🚪</span>
+        <div class="settings-row-info">
+          <div class="settings-row-label" style="color:#f87171;">Sign Out</div>
+          <div class="settings-row-sub">You'll keep your local data</div>
+        </div>
+        <span class="settings-btn-chevron">›</span>
+      </div>
+    </div>
+
+    <!-- Notifications -->
+    <div class="settings-section">
+      <div class="settings-section-title">NOTIFICATIONS</div>
+      <div class="settings-row">
+        <span class="settings-row-icon">🔔</span>
+        <div class="settings-row-info">
+          <div class="settings-row-label">Due Date Alerts</div>
+          <div class="settings-row-sub">Show warnings 5 days before due date</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-alerts" checked onchange="savePref('alerts',this.checked)"/>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-icon">📅</span>
+        <div class="settings-row-info">
+          <div class="settings-row-label">Statement Reminder</div>
+          <div class="settings-row-sub">Remind when statement is generated</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-stmt" checked onchange="savePref('stmtReminder',this.checked)"/>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Display -->
+    <div class="settings-section">
+      <div class="settings-section-title">DISPLAY</div>
+      <div class="settings-row">
+        <span class="settings-row-icon">🌙</span>
+        <div class="settings-row-info">
+          <div class="settings-row-label">Dark Mode</div>
+          <div class="settings-row-sub">Always on — optimised for OLED</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" checked disabled/>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-icon">💰</span>
+        <div class="settings-row-info">
+          <div class="settings-row-label">Currency</div>
+          <div class="settings-row-sub">Currently: Canadian Dollar (CAD)</div>
+        </div>
+        <select onchange="savePref('currency',this.value)" id="currency-select" style="background:#131320;border:1px solid #252535;color:#818cf8;padding:5px 8px;border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;">
+          <option value="$">$ CAD</option>
+          <option value="USD$">$ USD</option>
+          <option value="£">£ GBP</option>
+          <option value="€">€ EUR</option>
+          <option value="₹">₹ INR</option>
+          <option value="¥">¥ JPY</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Data -->
+    <div class="settings-section">
+      <div class="settings-section-title">DATA</div>
+      <button class="settings-btn" onclick="exportData()">
+        <span style="font-size:16px;">📤</span>
+        <div style="flex:1;text-align:left;">
+          <div>Export Data</div>
+          <div style="font-size:10px;color:#374151;margin-top:1px;">Download all your data as JSON</div>
+        </div>
+        <span class="settings-btn-chevron">›</span>
+      </button>
+      <button class="settings-btn" onclick="manualSync()" id="sync-btn">
+        <span style="font-size:16px;">☁</span>
+        <div style="flex:1;text-align:left;">
+          <div>Sync Now</div>
+          <div style="font-size:10px;color:#374151;margin-top:1px;">Manually push data to cloud</div>
+        </div>
+        <span class="settings-btn-chevron">›</span>
+      </button>
+      <button class="settings-btn danger" onclick="clearAllData()">
+        <span style="font-size:16px;">🗑</span>
+        <div style="flex:1;text-align:left;">
+          <div>Clear All Data</div>
+          <div style="font-size:10px;color:#374151;margin-top:1px;">Remove all cards and history</div>
+        </div>
+        <span class="settings-btn-chevron">›</span>
+      </button>
+    </div>
+
+    <!-- About -->
+    <div class="settings-section">
+      <div class="settings-section-title">ABOUT</div>
+      <div class="settings-row">
+        <span class="settings-row-icon">💳</span>
+        <div class="settings-row-info">
+          <div class="settings-row-label">Credit Tracker</div>
+          <div class="settings-row-sub">Version 2.0 · Built with Firebase</div>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-icon">🔒</span>
+        <div class="settings-row-info">
+          <div class="settings-row-label">Privacy</div>
+          <div class="settings-row-sub">Your data is private · Only you can see it</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-4 -->
 </div><!-- /app-content -->
 
 <!-- DRAWER -->
@@ -289,12 +452,13 @@ canvas{max-width:100%;}
 // Also enable: Authentication > Google sign-in, and Firestore Database
 // ════════════════════════════════════════════════════════
 const FIREBASE_CONFIG = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT.firebaseapp.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+  apiKey:            "AIzaSyBDGI5mv3VuOykAAy0Jh9nMREPh5fSKczg",
+  authDomain:        "credittracker-1d7a8.firebaseapp.com",
+  projectId:         "credittracker-1d7a8",
+  storageBucket:     "credittracker-1d7a8.firebasestorage.app",
+  messagingSenderId: "49249300238",
+  appId:             "1:49249300238:web:dafc16b808b204a903f15f",
+  measurementId:     "G-WVQZE5772X"
 };
 
 // ── Detect if Firebase is configured ──────────────────────────────────────
@@ -464,11 +628,13 @@ if(FIREBASE_CONFIGURED){
       await loadFromCloud();
       startRealtimeSync();
       renderAll();
+      renderSettingsAccount();
     } else {
       currentUser = null;
       document.getElementById('bar-loggedin').style.display='none';
       document.getElementById('bar-loggedout').style.display='flex';
       document.getElementById('cloud-status').textContent='';
+      renderSettingsAccount();
     }
   });
 }
@@ -485,12 +651,13 @@ window.addEventListener('offline', ()=>{
 // ── Tab switching ──────────────────────────────────────────────────────────
 function switchTab(i){
   document.querySelectorAll('.tab-btn').forEach((b,j)=>b.classList.toggle('active',i===j));
-  [0,1,2,3].forEach(j=>document.getElementById(`tab-${j}`).classList.toggle('hidden',i!==j));
+  [0,1,2,3,4].forEach(j=>document.getElementById(`tab-${j}`).classList.toggle('hidden',i!==j));
   document.getElementById('hamburger-btn').style.display=i===1?'flex':'none';
   activeTab=i;
   if(i===0)renderTab0();
   if(i===1)renderTab1();
   if(i===2)renderTab2();
+  if(i===4)renderSettingsAccount();
 }
 
 // ── ADD CARD ───────────────────────────────────────────────────────────────
@@ -819,6 +986,52 @@ if('serviceWorker' in navigator){
 const manifest={name:"Credit Tracker",short_name:"CreditTracker",start_url:".",display:"standalone",background_color:"#07070d",theme_color:"#07070d",description:"Personal credit card bill tracker",icons:[{src:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f0f1a'/><text y='.9em' font-size='80' x='10'>💳</text></svg>",sizes:"any",type:"image/svg+xml"}]};
 const mBlob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
 document.getElementById('manifest-link').href=URL.createObjectURL(mBlob);
+
+// ── SETTINGS ──────────────────────────────────────────────────────────────
+let prefs = JSON.parse(localStorage.getItem('ct_prefs')||'{}');
+
+function savePref(key, val){
+  prefs[key] = val;
+  localStorage.setItem('ct_prefs', JSON.stringify(prefs));
+}
+
+function renderSettingsAccount(){
+  const loggedIn = !!currentUser;
+  document.getElementById('settings-account-loggedout').style.display = loggedIn?'none':'flex';
+  document.getElementById('settings-account-loggedin').style.display  = loggedIn?'flex':'none';
+  document.getElementById('settings-signout-row').style.display        = loggedIn?'flex':'none';
+  if(loggedIn){
+    document.getElementById('settings-name').textContent  = currentUser.displayName||currentUser.email||'User';
+    document.getElementById('settings-email').textContent = currentUser.email||'';
+    if(currentUser.photoURL) document.getElementById('settings-avatar').src = currentUser.photoURL;
+  }
+  // Restore prefs
+  if(document.getElementById('toggle-alerts')) document.getElementById('toggle-alerts').checked = prefs.alerts!==false;
+  if(document.getElementById('toggle-stmt'))   document.getElementById('toggle-stmt').checked   = prefs.stmtReminder!==false;
+  if(document.getElementById('currency-select') && prefs.currency) document.getElementById('currency-select').value = prefs.currency;
+}
+
+function exportData(){
+  const blob = new Blob([JSON.stringify({cards,data,paid,exportedAt:new Date().toISOString()},null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'credit-tracker-backup.json';
+  a.click();
+}
+
+function manualSync(){
+  if(!currentUser){ alert('Sign in first to sync to cloud.'); return; }
+  pushToCloud();
+}
+
+function clearAllData(){
+  if(!confirm('Delete ALL cards and history? This cannot be undone.')) return;
+  cards=[];data={};paid={};
+  saveLocal();
+  if(currentUser) pushToCloud();
+  renderAll();
+  alert('All data cleared.');
+}
 
 // ── INIT ───────────────────────────────────────────────────────────────────
 loadLocal();
